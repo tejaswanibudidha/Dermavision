@@ -1,10 +1,38 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
 import useAnalysisResult from '../../hooks/useAnalysisResult';
 
 const Overview = () => {
     const { analysis, error } = useAnalysisResult();
+
+    const diseaseImageMap = {
+        melanoma: 'https://images.unsplash.com/photo-1514751492572-4e1fd377fe07?auto=format&fit=crop&w=400&h=300&q=80',
+        nevus: 'https://images.unsplash.com/photo-1526256262350-7da7584cf5eb?auto=format&fit=crop&w=400&h=300&q=80',
+        bkl: 'https://images.unsplash.com/photo-1600488991457-27df2317b45f?auto=format&fit=crop&w=400&h=300&q=80',
+        bcc: 'https://images.unsplash.com/photo-1580490407553-0fb577e0e3d8?auto=format&fit=crop&w=400&h=300&q=80',
+        akiec: 'https://images.unsplash.com/photo-1552960473-022b7a5195aa?auto=format&fit=crop&w=400&h=300&q=80',
+        df: 'https://images.unsplash.com/photo-1587073956350-0946af055b90?auto=format&fit=crop&w=400&h=300&q=80',
+        vasc: 'https://images.unsplash.com/photo-1540569014011-73026803e3ee?auto=format&fit=crop&w=400&h=300&q=80',
+        default: 'https://images.unsplash.com/photo-1542736667-069246bdbc82?auto=format&fit=crop&w=400&h=300&q=80',
+    };
+
+    const [diseaseImage, setDiseaseImage] = useState(diseaseImageMap.default);
+    const [uploadedImage, setUploadedImage] = useState(null);
+
+    useEffect(() => {
+        const storedImage = localStorage.getItem('dermavision.latestUploadedImage');
+        if (storedImage) {
+            setUploadedImage(storedImage);
+        }
+
+        if (analysis?.disease) {
+            const key = analysis.disease.toLowerCase();
+            setDiseaseImage(diseaseImageMap[key] || diseaseImageMap.default);
+        } else {
+            setDiseaseImage(diseaseImageMap.default);
+        }
+    }, [analysis]);
 
     return (
         <div className="space-y-6">
@@ -21,12 +49,15 @@ const Overview = () => {
                     <div className="p-6 md:p-8 bg-secondary-50 flex items-center justify-center">
                         <div className="relative rounded-lg overflow-hidden shadow-md">
                             <img
-                                src="https://placehold.co/400x300?text=Uploaded+Skin+Image"
-                                alt="Analyzed Skin"
+                                src={uploadedImage || diseaseImage}
+                                alt={`Sample for ${analysis?.disease ?? 'Skin'} disease`}
                                 className="max-w-full h-auto object-cover"
+                                onError={(e) => {
+                                    e.currentTarget.src = diseaseImageMap.default;
+                                }}
                             />
                             <div className="absolute bottom-0 right-0 bg-green-500 text-white px-3 py-1 text-sm font-medium rounded-tl-lg">
-                                Analyzed
+                                Best Match Preview
                             </div>
                         </div>
                     </div>
@@ -53,6 +84,12 @@ const Overview = () => {
                                     <span className="text-lg font-semibold text-orange-500">{analysis.severity}</span>
                                 </div>
                             </div>
+
+                            <div>
+                                <span className="text-sm text-secondary-500 block">Overview</span>
+                                <p className="text-sm text-primary-700">{analysis.overview || analysis.observation}</p>
+                            </div>
+
                             <p className="text-sm text-secondary-500">Image: {analysis.image_name}</p>
                         </div>
 

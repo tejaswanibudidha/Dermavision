@@ -86,9 +86,9 @@ const Home = () => {
 					<div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
 						{[
 							{ label: "AI Accuracy", value: "95%" },
-							{ label: "Users Trusted", value: "2k+" },
 							{ label: "Diseases Detected", value: "4+" },
-							{ label: "Analysis Time", value: "< 5s" }
+							{ label: "Analysis Time", value: "< 5s" },
+							{ label: "User Friendly", value: "100%" }
 						].map((stat, idx) => (
 							<div key={idx}>
 								<div className="text-3xl font-bold text-slate-900 mb-1">{stat.value}</div>
@@ -160,53 +160,102 @@ const Home = () => {
 				</div>
 			</section>
 
-			{/* How It Works Preview */}
-			<section className="py-24 bg-primary-50">
+
+			<section className="py-24 bg-gradient-to-br from-primary-50 to-secondary-50">
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-					<div className="grid lg:grid-cols-2 gap-16 items-center">
-						<motion.div
-							initial={{ opacity: 0, x: -50 }}
-							whileInView={{ opacity: 1, x: 0 }}
+					<div className="text-center mb-16">
+						<motion.h2
+							initial={{ opacity: 0, y: 20 }}
+							whileInView={{ opacity: 1, y: 0 }}
 							viewport={{ once: true }}
+							className="text-4xl font-bold text-primary-900 mb-6"
 						>
-							<h2 className="text-4xl font-bold text-primary-900 mb-6">Simple Steps to Better Skin Health</h2>
-							<p className="text-xl text-secondary-600 mb-8">
-								Using DermaVision is as easy as taking a selfie. No complex medical jargon, just clear answers.
-							</p>
+							Simple Steps to Better Health
+						</motion.h2>
+						<motion.p
+							initial={{ opacity: 0, y: 20 }}
+							whileInView={{ opacity: 1, y: 0 }}
+							viewport={{ once: true }}
+							transition={{ delay: 0.1 }}
+							className="text-xl text-secondary-600 max-w-2xl mx-auto"
+						>
+							Our AI-powered skin analysis makes it easy to take control of your skin health. Follow these simple steps for instant insights.
+						</motion.p>
+					</div>
 
-							<div className="space-y-6">
-								{[
-									"Take a clear photo of the affected area",
-									"Upload securely to our encrypted platform",
-									"Receive instant analysis and recommendations"
-								].map((item, idx) => (
-									<div key={idx} className="flex items-center gap-4">
-										<CheckCircle className="w-6 h-6 text-primary-500 flex-shrink-0" />
-										<span className="text-lg text-primary-900 font-medium">{item}</span>
+					<div className="grid lg:grid-cols-2 gap-16 items-center">
+						<div className="space-y-8">
+							{[
+								{
+									step: "01",
+									title: "Choose a full skin frame",
+									desc: "Use a photo that covers the whole affected area, minimizing background and occlusions.",
+									icon: "📸"
+								},
+								{
+									step: "02",
+									title: "Analyze, get results",
+									desc: "Receive disease name, confidence score, overview, precautions, and a diet plan from the model.",
+									icon: "🤖"
+								}
+							].map((item, index) => (
+								<motion.div
+									key={index}
+									initial={{ opacity: 0, x: -50 }}
+									whileInView={{ opacity: 1, x: 0 }}
+									viewport={{ once: true }}
+									transition={{ delay: index * 0.2 }}
+									className="flex items-start gap-6 p-6 rounded-2xl bg-white shadow-lg border border-secondary-100 hover:shadow-2xl transform hover:-translate-y-1 transition-all"
+								>
+									<div className="flex-shrink-0">
+										<div className="w-18 h-18 bg-primary-100 rounded-full flex items-center justify-center text-3xl mb-2">
+											{item.icon}
+										</div>
+										<div className="text-center">
+											<span className="text-sm font-bold text-primary-600">{item.step}</span>
+										</div>
 									</div>
-								))}
-							</div>
-
-						</motion.div>
+									<div>
+										<h3 className="text-xl font-bold text-primary-900 mb-2">{item.title}</h3>
+										<p className="text-secondary-600 leading-relaxed">{item.desc}</p>
+									</div>
+								</motion.div>
+							))}
+						</div>
 
 						<motion.div
-							initial={{ opacity: 0, x: 50 }}
-							whileInView={{ opacity: 1, x: 0 }}
+							initial={{ opacity: 0, x: 50, scale: 0.95 }}
+							whileInView={{ opacity: 1, x: 0, scale: 1 }}
 							viewport={{ once: true }}
+							transition={{ duration: 0.8 }}
 							className="relative"
 						>
-							<div className="absolute inset-0 bg-gradient-to-tr from-primary-600 to-primary-800 rounded-3xl transform rotate-3 scale-95 opacity-20 blur-xl"></div>
-							<div className="relative bg-white p-8 rounded-3xl shadow-2xl border border-secondary-100">
-								{/* Abstract UI Representation */}
-								<div className="space-y-4">
-									<div className="h-40 bg-secondary-100 rounded-xl w-full flex items-center justify-center text-secondary-400">
-										<Activity className="w-8 h-8" />
-									</div>
-									<div className="h-4 bg-secondary-100 rounded-full w-3/4"></div>
-									<div className="h-4 bg-secondary-100 rounded-full w-1/2"></div>
-									<div className="flex gap-2 pt-4">
-										<div className="h-10 bg-primary-100 rounded-lg w-full"></div>
-										<div className="h-10 bg-secondary-100 rounded-lg w-full"></div>
+							<div className="absolute inset-0 bg-gradient-to-tr from-primary-600 to-primary-800 rounded-3xl transform rotate-3 scale-95 opacity-20 blur-xl animate-pulse"></div>
+							<div className="relative bg-white p-10 rounded-3xl shadow-2xl border border-secondary-100">
+								{/* AI Bot Illustration */}
+								<div className="text-center">
+									<motion.div
+										animate={{
+											scale: [1, 1.1, 1],
+											rotate: [0, 2, -2, 0]
+										}}
+										transition={{
+											duration: 4,
+											repeat: Infinity,
+											ease: 'easeInOut'
+										}}
+										className="w-44 h-44 md:w-56 md:h-56 mx-auto mb-6 bg-gradient-to-br from-primary-500 to-sky-500 rounded-full flex items-center justify-center text-7xl shadow-2xl"
+									>
+										🤖
+									</motion.div>
+									<h3 className="text-3xl font-bold text-primary-900 mb-4">AI Skin Analysis Bot</h3>
+									<p className="text-secondary-600 mb-6">
+										Advanced HAM10000 style analysis with improved visual insights and crisp interface.
+									</p>
+									<div className="flex justify-center space-x-4">
+										<motion.span animate={{ y: [0, -12, 0] }} transition={{ duration: 1.6, repeat: Infinity, delay: 0 }} className="w-3 h-3 bg-indigo-500 rounded-full"></motion.span>
+										<motion.span animate={{ y: [0, -12, 0] }} transition={{ duration: 1.6, repeat: Infinity, delay: 0.3 }} className="w-3 h-3 bg-blue-400 rounded-full"></motion.span>
+										<motion.span animate={{ y: [0, -12, 0] }} transition={{ duration: 1.6, repeat: Infinity, delay: 0.6 }} className="w-3 h-3 bg-cyan-400 rounded-full"></motion.span>
 									</div>
 								</div>
 							</div>
@@ -214,61 +263,6 @@ const Home = () => {
 					</div>
 				</div>
 			</section>
-
-			<footer className="bg-primary-900 border-t border-primary-700">
-				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-					<div className="grid md:grid-cols-4 gap-10 pb-8 border-b border-primary-700">
-						<div>
-							<h3 className="text-xl font-bold text-white mb-4">Derma Vision</h3>
-							<p className="text-primary-100 leading-relaxed">
-								AI-powered skin analysis platform helping users detect skin conditions early and get suggestions.
-							</p>
-						</div>
-
-						<div>
-							<h3 className="text-xl font-bold text-white mb-4">Quick Links</h3>
-							<div className="flex flex-col gap-3 text-primary-100">
-								<Link to="/" className="hover:text-white transition-colors">Home</Link>
-								<Link to="/#features" className="hover:text-white transition-colors">Features</Link>
-								<Link to="/upload" className="hover:text-white transition-colors">Skin Analysis</Link>
-								<Link to="/about" className="hover:text-white transition-colors">About</Link>
-								<Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
-							</div>
-						</div>
-
-						<div>
-							<h3 className="text-xl font-bold text-white mb-4">Contact</h3>
-							<div className="space-y-3 text-primary-100">
-								<p>Phone: +91 98765 43210</p>
-								<p>Email: support@dermavision.ai</p>
-							</div>
-						</div>
-
-						<div>
-							<h3 className="text-xl font-bold text-white mb-4">Location</h3>
-							<p className="text-primary-100">Hyderabad, Telangana, India</p>
-						</div>
-					</div>
-
-					<div className="py-6 border-b border-primary-700">
-						<div className="flex flex-wrap items-center justify-center gap-3 text-primary-100 font-medium">
-							<Link to="/" className="hover:text-white transition-colors">Home</Link>
-							<span>|</span>
-							<Link to="/#features" className="hover:text-white transition-colors">Features</Link>
-							<span>|</span>
-							<Link to="/upload" className="hover:text-white transition-colors">Skin Analysis</Link>
-							<span>|</span>
-							<Link to="/about" className="hover:text-white transition-colors">About</Link>
-							<span>|</span>
-							<Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
-						</div>
-					</div>
-
-					<div className="pt-6 text-center text-primary-200 font-medium">
-                        
-					</div>
-				</div>
-			</footer>
 
 		</div>
 	);

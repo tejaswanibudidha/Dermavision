@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 
 class UserCreate(BaseModel):
@@ -32,6 +33,7 @@ class AnalysisResult(BaseModel):
     condition_name: str
     confidence: int
     severity: str
+    overview: str
     observation: str
     summary: str
     recommendation: str
@@ -46,6 +48,24 @@ class AnalysisResult(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class ContactMessage(BaseModel):
+    name: str
+    email: str
+    message: str
+
+
+class ContactMessageResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    message: str
+    created_at: datetime
+    is_read: int
+
+    class Config:
+        from_attributes = True
 
 
 class ForgotPasswordRequest(BaseModel):

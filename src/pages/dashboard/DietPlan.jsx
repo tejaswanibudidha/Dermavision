@@ -10,7 +10,7 @@ const DietPlan = () => {
             <h1 className="text-2xl font-bold text-primary-900 mb-6">Recommended Diet</h1>
 
             <p className="text-secondary-600 mb-8">
-                Diet can play a significant role in managing skin conditions. Here are some anti-inflammatory foods recommended for eczema-prone skin.
+                Diet can support symptom control for {analysis.condition_name}. The suggestions below are tailored to the current predicted condition.
             </p>
 
             <div className="grid md:grid-cols-2 gap-6">

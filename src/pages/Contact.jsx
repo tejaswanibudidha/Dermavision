@@ -1,9 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Mail, Phone, Send } from 'lucide-react';
 
 const Contact = () => {
-    const emailAddress = 'support@dermavision.ai';
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        message: ''
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+
+    const emailAddress = 'dermavision32@gmail.com';
     const gmailComposeUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailAddress)}`;
 
     const handleEmailClick = (event) => {
@@ -14,6 +22,45 @@ const Contact = () => {
     const handleEmailKeyDown = (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
             handleEmailClick(event);
+        }
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        setSuccessMessage('');
+
+        try {
+            // Here you would send the form data to your backend
+            // For now, we'll simulate sending an email
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/contact`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData),
+            });
+
+            if (response.ok) {
+                setSuccessMessage('Your message has been sent successfully to dermavision32@gmail.com!');
+                setFormData({ name: '', email: '', message: '' });
+            } else {
+                const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                throw new Error(errorData.detail || 'Failed to send message');
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+            setSuccessMessage(`Failed to send message: ${error.message}. Please try again, or send directly to dermavision32@gmail.com.`);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -51,7 +98,7 @@ const Contact = () => {
                                     rel="noopener noreferrer"
                                     className="text-secondary-600 hover:text-primary-600 transition-colors"
                                 >
-                                    Gmr,Rajam,Vizianagaram,Andrapadresh,India
+                                    GMRITDU, Rajam, Vizianagaram, Andhra Pradesh, India
                                 </a>
                             </div>
                         </div>
@@ -77,7 +124,7 @@ const Contact = () => {
                                         className="text-secondary-600 hover:text-primary-600 transition-colors underline"
                                         onClick={(event) => event.stopPropagation()}
                                     >
-                                        support@dermavisison
+                                        dermavision32@gmail.com
                                     </a>
                                 </div>
                             </div>
@@ -112,14 +159,18 @@ const Contact = () => {
                         className="bg-white p-8 rounded-2xl shadow-xl border border-secondary-100"
                     >
                         <h2 className="text-2xl font-bold text-primary-900 mb-6">Send us a Message</h2>
-                        <form className="space-y-6">
+                        <form onSubmit={handleSubmit} className="space-y-6">
                             <div>
                                 <label htmlFor="name" className="block text-sm font-medium text-secondary-700 mb-2">Full Name</label>
                                 <input
                                     type="text"
                                     id="name"
+                                    name="name"
+                                    value={formData.name}
+                                    onChange={handleInputChange}
                                     className="w-full px-4 py-3 rounded-xl border border-secondary-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all bg-secondary-50"
                                     placeholder="John Doe"
+                                    required
                                 />
                             </div>
 
@@ -128,8 +179,12 @@ const Contact = () => {
                                 <input
                                     type="email"
                                     id="email"
+                                    name="email"
+                                    value={formData.email}
+                                    onChange={handleInputChange}
                                     className="w-full px-4 py-3 rounded-xl border border-secondary-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all bg-secondary-50"
                                     placeholder="john@example.com"
+                                    required
                                 />
                             </div>
 
@@ -137,17 +192,28 @@ const Contact = () => {
                                 <label htmlFor="message" className="block text-sm font-medium text-secondary-700 mb-2">Message</label>
                                 <textarea
                                     id="message"
+                                    name="message"
+                                    value={formData.message}
+                                    onChange={handleInputChange}
                                     rows="4"
                                     className="w-full px-4 py-3 rounded-xl border border-secondary-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all bg-secondary-50 resize-none"
                                     placeholder="How can we help you?"
+                                    required
                                 ></textarea>
                             </div>
 
+                            {successMessage && (
+                                <div className={`p-4 rounded-xl ${successMessage.includes('successfully') ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                                    {successMessage}
+                                </div>
+                            )}
+
                             <button
                                 type="submit"
-                                className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center space-x-2 group"
+                                disabled={isSubmitting}
+                                className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white font-semibold py-4 rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center space-x-2 group"
                             >
-                                <span>Send Message</span>
+                                <span>{isSubmitting ? 'Sending...' : 'Send Message'}</span>
                                 <Send className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </button>
                         </form>

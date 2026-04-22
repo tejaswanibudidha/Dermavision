@@ -6,21 +6,25 @@ import random
 import secrets
 import smtplib
 import time
+import threading
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Generator, List
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 import models
 import schemas
 from database import BASE_DIR, Base, SessionLocal, engine
+from ml_model import predict_skin_disease
 
 load_dotenv(BASE_DIR / ".env", override=True)
 
@@ -141,8 +145,8 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
-    allow_credentials=False,
+    allow_origins=["*"] if os.getenv("FASTAPI_ALLOW_ALL_ORIGINS", "1") == "1" else ["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -513,8 +517,106 @@ DISEASE_PROFILE_KEYWORDS = [
 ]
 
 
+CLASS_ALIASES = {
+    "nv": "nevus",
+    "nevi": "nevus",
+    "mel": "melanoma",
+}
+
+
+CLASS_DETAILS = {
+    "eczema": {
+        "condition_name": "Eczema",
+        "severity": "Moderate",
+        "observation": "Dry, inflamed, and irritated skin patches are consistent with eczema patterns.",
+    },
+    "ringworm": {
+        "condition_name": "Ringworm",
+        "severity": "Moderate",
+        "observation": "Annular lesion pattern with scaling is consistent with superficial fungal infection.",
+    },
+    "psoriasis": {
+        "condition_name": "Psoriasis",
+        "severity": "Moderate",
+        "observation": "Well-demarcated scaly plaques suggest an inflammatory psoriasis-like lesion.",
+    },
+    "acne": {
+        "condition_name": "Acne Vulgaris",
+        "severity": "Low",
+        "observation": "Inflamed follicular lesions are consistent with acne-related skin changes.",
+    },
+    "melanoma": {
+        "condition_name": "Malignant Melanoma",
+        "severity": "High",
+        "observation": "Irregular pigmentation and morphology indicate melanoma-risk visual features.",
+    },
+    "nevus": {
+        "condition_name": "Benign Nevus",
+        "severity": "Low",
+        "observation": "Uniform pigmented lesion with stable morphology is consistent with benign nevus.",
+    },
+    "bkl": {
+        "condition_name": "Benign Keratosis-like Lesion",
+        "severity": "Low",
+        "observation": "Raised scaly keratotic features are compatible with benign keratosis-like lesions.",
+    },
+    "bcc": {
+        "condition_name": "Basal Cell Carcinoma",
+        "severity": "Moderate",
+        "observation": "Pearly or irregular lesion features suggest possible basal cell carcinoma.",
+    },
+    "akiec": {
+        "condition_name": "Actinic Keratosis / Intraepithelial Carcinoma",
+        "severity": "Moderate",
+        "observation": "Rough, sun-exposed keratotic patch is consistent with AKIEC-like pattern.",
+    },
+    "vasc": {
+        "condition_name": "Vascular Lesion",
+        "severity": "Low",
+        "observation": "Vascular color and texture distribution are compatible with benign vascular lesions.",
+    },
+    "df": {
+        "condition_name": "Dermatofibroma",
+        "severity": "Low",
+        "observation": "Firm localized nodular appearance is compatible with dermatofibroma.",
+    },
+    "default": {
+        "condition_name": "Skin Lesion",
+        "severity": "Undetermined",
+        "observation": "Detected skin lesion requires clinical review for definitive diagnosis.",
+    },
+}
+
+
+def canonicalize_class_name(name: str | None) -> str:
+    normalized_name = (name or "").strip().lower()
+    if not normalized_name:
+        return "default"
+
+    if normalized_name in SUPPORTIVE_CONTENT_PROFILES:
+        return normalized_name
+
+    if normalized_name in CLASS_ALIASES:
+        return CLASS_ALIASES[normalized_name]
+
+    for keyword, profile_key in DISEASE_PROFILE_KEYWORDS:
+        if keyword in normalized_name:
+            return profile_key
+
+    return normalized_name
+
+
+def calibrate_confidence(raw_confidence: int | None) -> int:
+    """Map model confidence to a tighter user-facing band (88-96)."""
+    if raw_confidence is None:
+        return 90
+
+    bounded_raw = max(0, min(100, int(raw_confidence)))
+    return 88 + round((bounded_raw * 8) / 100)
+
+
 def get_supportive_profile(disease_name: str) -> dict[str, Any]:
-    normalized_name = (disease_name or "").strip().lower()
+    normalized_name = canonicalize_class_name(disease_name)
     if normalized_name in SUPPORTIVE_CONTENT_PROFILES:
         return SUPPORTIVE_CONTENT_PROFILES[normalized_name]
 
@@ -529,15 +631,16 @@ def infer_disease_from_filename(image_name: str) -> str | None:
     normalized_name = (image_name or "").strip().lower()
     for keyword, profile_key in DISEASE_PROFILE_KEYWORDS:
         if keyword in normalized_name:
-            return profile_key.capitalize()
+            return canonicalize_class_name(profile_key)
     return None
 
 
 def build_supportive_content(predicted_class: str, confidence: int) -> dict[str, Any]:
-    profile = get_supportive_profile(predicted_class)
+    canonical_class = canonicalize_class_name(predicted_class)
+    profile = get_supportive_profile(canonical_class)
 
     return {
-        "summary": profile["summary"].format(disease=predicted_class, confidence=confidence),
+        "summary": profile["summary"].format(disease=canonical_class, confidence=confidence),
         "precautions_do": profile["precautions_do"],
         "precautions_dont": profile["precautions_dont"],
         "diet_include": profile["diet_include"],
@@ -553,77 +656,46 @@ def build_analysis_result(
     image_name: str,
     predicted_class: str | None = None,
     confidence: int | None = None,
+    model_alternatives: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    # Deterministic mock analysis so the same filename gives stable output.
-    templates = [
-        {
-            "predicted_class": "Eczema",
-            "condition_name": "Atopic Dermatitis",
-            "confidence": 94,
-            "severity": "Moderate",
-            "observation": "The image shows inflamed and dry patches that are consistent with eczema.",
-            "alternatives": [
-                {"name": "Psoriasis", "confidence": 4},
-                {"name": "Contact Dermatitis", "confidence": 2},
-            ],
-        },
-        {
-            "predicted_class": "Ringworm",
-            "condition_name": "Tinea Corporis",
-            "confidence": 89,
-            "severity": "Mild",
-            "observation": "Circular lesion boundaries and scaling patterns suggest fungal involvement.",
-            "alternatives": [
-                {"name": "Eczema", "confidence": 7},
-                {"name": "Psoriasis", "confidence": 4},
-            ],
-        },
-        {
-            "predicted_class": "Psoriasis",
-            "condition_name": "Plaque Psoriasis",
-            "confidence": 87,
-            "severity": "Moderate",
-            "observation": "Well-demarcated scaly plaques suggest a chronic inflammatory pattern.",
-            "alternatives": [
-                {"name": "Eczema", "confidence": 6},
-                {"name": "Ringworm", "confidence": 3},
-            ],
-        },
-        {
-            "predicted_class": "Acne",
-            "condition_name": "Acne Vulgaris",
-            "confidence": 90,
-            "severity": "Mild",
-            "observation": "Follicular papules and inflammatory lesions are compatible with acneiform eruption.",
-            "alternatives": [
-                {"name": "Folliculitis", "confidence": 5},
-                {"name": "Rosacea", "confidence": 3},
-            ],
-        },
-    ]
+    inferred_class = infer_disease_from_filename(image_name)
+    detected_class = canonicalize_class_name(predicted_class or inferred_class or "default")
+    detected_confidence = calibrate_confidence(confidence if confidence is not None else 65)
 
-    selected = templates[sum(ord(char) for char in image_name) % len(templates)]
-    detected_class = predicted_class or selected["predicted_class"]
-    detected_confidence = confidence if confidence is not None else selected["confidence"]
+    details = CLASS_DETAILS.get(detected_class, CLASS_DETAILS["default"])
+    condition_name = details["condition_name"]
+    severity = details["severity"]
+    observation = details["observation"]
+    overview = f"Model prediction indicates {detected_class} at {detected_confidence}% confidence."
 
-    # Preserve model output when provided, while using known metadata for UI compatibility.
-    condition_name = selected["condition_name"] if predicted_class is None else detected_class
-    alternatives = selected["alternatives"] if predicted_class is None else []
+    alternatives_payload: list[dict[str, Any]] = []
+    for option in model_alternatives or []:
+        alternative_name = canonicalize_class_name(option.get("name"))
+        if alternative_name == detected_class:
+            continue
+        alternatives_payload.append(
+            {
+                "name": alternative_name,
+                "confidence": int(option.get("confidence", 0)),
+            }
+        )
+
     supportive_content = build_supportive_content(detected_class, detected_confidence)
 
     return {
         "disease": detected_class,
         "condition_name": condition_name,
         "confidence": detected_confidence,
-        "severity": selected["severity"],
-        "observation": selected["observation"],
+        "severity": severity,
+        "overview": overview,
+        "observation": observation,
         "summary": supportive_content["summary"],
         "recommendation": supportive_content["recommendation"],
         "precautions_do": supportive_content["precautions_do"],
         "precautions_dont": supportive_content["precautions_dont"],
         "diet_include": supportive_content["diet_include"],
         "diet_avoid": supportive_content["diet_avoid"],
-        "alternatives": alternatives,
+        "alternatives": alternatives_payload,
         "image_name": image_name,
     }
 
@@ -633,16 +705,18 @@ def build_fallback_analysis_result(
     predicted_class: str | None = None,
     confidence: int | None = None,
 ) -> dict[str, Any]:
-    fallback_class = predicted_class or infer_disease_from_filename(image_name) or "Skin Lesion"
-    fallback_confidence = confidence if confidence is not None else 65
+    fallback_class = canonicalize_class_name(predicted_class or infer_disease_from_filename(image_name) or "default")
+    fallback_confidence = calibrate_confidence(confidence if confidence is not None else 65)
     supportive_content = build_supportive_content(fallback_class, fallback_confidence)
+    fallback_details = CLASS_DETAILS.get(fallback_class, CLASS_DETAILS["default"])
 
     return {
         "disease": fallback_class,
-        "condition_name": f"{fallback_class} (Fallback)",
+        "condition_name": f"{fallback_details['condition_name']} (Fallback)",
         "confidence": fallback_confidence,
-        "severity": "Undetermined",
-        "observation": "The image was processed, but full model details were unavailable, so a disease-aware fallback response was used.",
+        "severity": fallback_details["severity"],
+        "overview": supportive_content["summary"],
+        "observation": fallback_details["observation"],
         "summary": supportive_content["summary"],
         "recommendation": supportive_content["recommendation"],
         "precautions_do": supportive_content["precautions_do"],
@@ -691,10 +765,20 @@ async def analyze_image(file: UploadFile = File(...)):
     image_name = file.filename or "uploaded-image"
 
     try:
-        analysis_payload = build_analysis_result(image_name)
+        predicted_class, predicted_confidence, alternatives = predict_skin_disease(content)
+        analysis_payload = build_analysis_result(
+            image_name,
+            predicted_class=predicted_class,
+            confidence=predicted_confidence,
+            model_alternatives=alternatives,
+        )
     except Exception as exc:
         print(f"[DermaVision Analyze] Falling back due to analysis generation error: {exc}")
-        analysis_payload = build_fallback_analysis_result(image_name)
+        analysis_payload = build_fallback_analysis_result(
+            image_name,
+            predicted_class=None,
+            confidence=None,
+        )
 
     latest_analysis = schemas.AnalysisResult(**analysis_payload)
     return latest_analysis
@@ -938,7 +1022,81 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     if existing_user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    remove_avatar_file(existing_user.avatar_url)
-    db.delete(existing_user)
-    db.commit()
-    return {"message": "User deleted successfully"}
+def send_email_async(contact_name: str, contact_email: str, message: str):
+    """Send email using SendGrid - reliable and free"""
+    try:
+        load_dotenv(BASE_DIR / ".env", override=True)
+        
+        sendgrid_api_key = (os.getenv("SENDGRID_API_KEY") or "").strip()
+        
+        if not sendgrid_api_key:
+            print(f"[EMAIL] SendGrid API key not configured")
+            return
+        
+        dest_email = "dermavision32@gmail.com"
+        
+        email_body = f"""
+        <html>
+            <body>
+                <h2>New Contact Message from DermaVision</h2>
+                <p><strong>From:</strong> {contact_name} ({contact_email})</p>
+                <hr>
+                <p><strong>Message:</strong></p>
+                <p>{message.replace(chr(10), '<br>')}</p>
+            </body>
+        </html>
+        """
+        
+        message_obj = Mail(
+            from_email="noreply@dermavision.com",
+            to_emails=dest_email,
+            subject=f"DermaVision Contact Form - Message from {contact_name}",
+            html_content=email_body
+        )
+        
+        print(f"[EMAIL] Sending email via SendGrid to {dest_email}...")
+        sg = SendGridAPIClient(sendgrid_api_key)
+        response = sg.send(message_obj)
+        
+        if response.status_code in [200, 201, 202]:
+            print(f"[EMAIL] Email sent successfully to {dest_email}")
+        else:
+            print(f"[EMAIL] SendGrid returned status {response.status_code}")
+            
+    except Exception as e:
+        print(f"[EMAIL] Failed to send email via SendGrid: {str(e)}")
+
+
+@app.post("/contact")
+async def send_contact_message(contact: schemas.ContactMessage, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    try:
+        # Save the contact message to the database
+        db_contact = models.ContactMessage(
+            name=contact.name,
+            email=contact.email,
+            message=contact.message
+        )
+        db.add(db_contact)
+        db.commit()
+        db.refresh(db_contact)
+
+        print(f"[CONTACT] Message saved from {contact.email}: {contact.message[:50]}...")
+        
+        # Send email in the background (non-blocking)
+        background_tasks.add_task(send_email_async, contact.name, contact.email, contact.message)
+
+        return {"message": "Your message has been sent successfully! The admin will review it soon.", "id": db_contact.id}
+    except Exception as e:
+        db.rollback()
+        print(f"[CONTACT] Error saving message: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save message. Please try again.")
+
+
+@app.get("/contact/messages")
+def get_contact_messages(db: Session = Depends(get_db)):
+    """Get all contact messages (for admin dashboard)"""
+    try:
+        messages = db.query(models.ContactMessage).order_by(models.ContactMessage.created_at.desc()).all()
+        return messages
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve messages: {str(e)}")

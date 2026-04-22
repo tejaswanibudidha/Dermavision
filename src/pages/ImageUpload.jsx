@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { analyzeImage } from '../services/api';
 
-const MAX_SAMPLES = 4;
+const MAX_SAMPLES = 2;
 
 const ImageUpload = () => {
     const navigate = useNavigate();
@@ -50,31 +50,136 @@ const ImageUpload = () => {
         };
     }, [samples]);
 
-    const handleFile = (file) => {
-        if (file.type.startsWith('image/')) {
-            setError('');
+    const isSkinPixel = (r, g, b) => {
+        if (r < 40 || g < 20 || b < 20) return false;
+        if (r <= g || r <= b) return false;
+        if (Math.max(r, g, b) - Math.min(r, g, b) < 15) return false;
 
-            setSamples((previousSamples) => {
-                const emptySlotIndex = previousSamples.findIndex((sample) => sample === null);
-                if (emptySlotIndex === -1) {
-                    setError('You can upload only 4 images. Remove one sample to add a new image.');
-                    return previousSamples;
-                }
+        const y = 0.299 * r + 0.587 * g + 0.114 * b;
+        const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+        const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
 
-                const previewUrl = URL.createObjectURL(file);
-                const updated = [...previousSamples];
-                updated[emptySlotIndex] = {
-                    id: Date.now() + emptySlotIndex,
-                    file,
-                    previewUrl,
-                    name: file.name,
+        return cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 && y >= 40 && y <= 255;
+    };
+
+    const validateImageFullSkin = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const size = 64;
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, size, size);
+
+                    const data = ctx.getImageData(0, 0, size, size).data;
+                    let skinPixelCount = 0;
+                    let validPixelCount = 0;
+
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        const alpha = data[i + 3];
+
+                        if (alpha === 0) continue;
+
+                        validPixelCount += 1;
+                        if (isSkinPixel(r, g, b)) {
+                            skinPixelCount += 1;
+                        }
+                    }
+
+                    const skinRatio = skinPixelCount / Math.max(validPixelCount, 1);
+                    if (skinRatio < 0.30) {
+                        reject('Image appears to contain less than 30% skin area; upload a clear skin image.');
+                        return;
+                    }
+
+                    resolve();
                 };
-                setSelectedSampleIndex(emptySlotIndex);
-                return updated;
-            });
-        } else {
-            alert("Please upload an image file");
+                img.onerror = () => reject('Unable to read the image. Please try another file.');
+                img.src = reader.result;
+            };
+            reader.onerror = () => reject('Failed to load image for validation.');
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const validateImageDimensions = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const { width, height } = img;
+                    if (width < 224 || height < 224) {
+                        reject('Please upload a larger skin image (at least 224x224).');
+                        return;
+                    }
+
+                    // Allow rectangle/panoramic images as long as dimensions are valid.
+                    const ratio = Math.min(width / height, height / width);
+                    if (ratio < 0.2) {
+                        reject('Please upload a skin image with valid shape (not an extremely narrow strip).');
+                        return;
+                    }
+
+                    resolve();
+                };
+                img.onerror = () => reject('Unable to read the image. Please try another file.');
+                img.src = reader.result;
+            };
+            reader.onerror = () => reject('Failed to load image for validation.');
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleFile = async (file) => {
+        // Check file type
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowedTypes.includes(file.type)) {
+            setError('Please upload only JPG or PNG image files.');
+            return;
         }
+
+        // Check if it's a valid skin disease image (basic check - could be enhanced)
+        if (!file.type.startsWith('image/')) {
+            setError('Please upload a valid image file.');
+            return;
+        }
+
+        setError('');
+
+        try {
+            await validateImageDimensions(file);
+            await validateImageFullSkin(file);
+        } catch (validationError) {
+            setError(validationError);
+            return;
+        }
+
+        setSamples((previousSamples) => {
+            const emptySlotIndex = previousSamples.findIndex((sample) => sample === null);
+            if (emptySlotIndex === -1) {
+                setError(`You can upload only ${MAX_SAMPLES} images maximum. Remove one sample to add a new image.`);
+                return previousSamples;
+            }
+
+            const previewUrl = URL.createObjectURL(file);
+            const updated = [...previousSamples];
+            updated[emptySlotIndex] = {
+                id: Date.now() + emptySlotIndex,
+                file,
+                previewUrl,
+                name: file.name,
+            };
+            setSelectedSampleIndex(emptySlotIndex);
+            return updated;
+        });
     };
 
     const removeSample = (index) => {
@@ -97,6 +202,15 @@ const ImageUpload = () => {
         if (inputRef.current) inputRef.current.value = '';
     };
 
+    const convertFileToDataURL = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject('Unable to process the chosen image.');
+            reader.readAsDataURL(file);
+        });
+    };
+
     const handleSubmit = async () => {
         const selectedSample = selectedSampleIndex !== null ? samples[selectedSampleIndex] : null;
 
@@ -108,6 +222,15 @@ const ImageUpload = () => {
         try {
             setIsAnalyzing(true);
             setError('');
+
+            // Save uploaded preview for use in Overview.
+            try {
+                const dataUrl = await convertFileToDataURL(selectedSample.file);
+                localStorage.setItem('dermavision.latestUploadedImage', dataUrl);
+            } catch (conversionError) {
+                console.warn('Preview save failed:', conversionError);
+            }
+
             // Backend connection: send the selected image for analysis.
             await analyzeImage(selectedSample.file);
             navigate('/dashboard');
@@ -146,7 +269,7 @@ const ImageUpload = () => {
                                 type="file"
                                 className="hidden"
                                 onChange={handleChange}
-                                accept="image/jpeg,image/png,image/jpg"
+                                accept="image/jpeg,image/png"
                             />
 
                             <>
@@ -154,7 +277,7 @@ const ImageUpload = () => {
                                     <Upload size={32} />
                                 </div>
                                 <p className="text-slate-900 font-medium text-lg">Click to upload or drag and drop</p>
-                                <p className="text-slate-500 mt-2">JPG, PNG, JPEG (up to 4 images)</p>
+                                <p className="text-slate-500 mt-2">JPG, PNG (up to {MAX_SAMPLES} images) - full skin frame recommended</p>
                                 <p className="text-xs text-slate-500 mt-3">Uploaded: {uploadedCount}/{MAX_SAMPLES}</p>
                             </>
                         </div>
@@ -221,7 +344,7 @@ const ImageUpload = () => {
                             ))}
                         </div>
                         <p className="text-xs text-slate-500 mt-4">
-                            * Upload up to 4 images. Click any sample to select it for analysis. Use X to remove and re-upload.
+                            * Upload up to {MAX_SAMPLES} images. Click any sample to select it for analysis. Use X to remove and re-upload.
                         </p>
                     </div>
 
