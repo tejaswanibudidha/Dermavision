@@ -36,6 +36,7 @@ class AnalysisResult(BaseModel):
     overview: str
     observation: str
     summary: str
+    common_symptoms: list[str]
     recommendation: str
     precautions_do: list[str]
     precautions_dont: list[str]

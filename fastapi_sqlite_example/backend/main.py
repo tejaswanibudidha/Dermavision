@@ -588,6 +588,82 @@ CLASS_DETAILS = {
 }
 
 
+COMMON_SYMPTOMS_BY_PROFILE = {
+    "eczema": [
+        "Dry, itchy skin patches.",
+        "Redness with mild swelling during flare-ups.",
+        "Skin roughness, cracking, or scaling.",
+        "Itch that worsens at night.",
+    ],
+    "ringworm": [
+        "Ring-shaped rash with clearer skin in the center.",
+        "Itchy, scaly edges around the lesion.",
+        "Mild redness that gradually expands outward.",
+        "Occasional burning or stinging in irritated areas.",
+    ],
+    "psoriasis": [
+        "Thick, scaly plaques on skin.",
+        "Persistent redness with flaking.",
+        "Itching or burning over affected patches.",
+        "Dry skin that may crack and bleed.",
+    ],
+    "acne": [
+        "Whiteheads and blackheads.",
+        "Red inflamed pimples or papules.",
+        "Tender nodules in deeper breakouts.",
+        "Oily skin with recurrent eruptions.",
+    ],
+    "melanoma": [
+        "Asymmetrical mole or pigmented lesion.",
+        "Irregular or notched lesion borders.",
+        "Multiple or changing colors in one spot.",
+        "Rapid evolution in size, shape, or texture.",
+    ],
+    "nevus": [
+        "Small, round or oval pigmented mole.",
+        "Mostly uniform color within the lesion.",
+        "Stable size and shape over long periods.",
+        "Occasional mild irritation from friction.",
+    ],
+    "bkl": [
+        "Waxy or rough raised skin growth.",
+        "Brown, tan, or darkly pigmented patch.",
+        "Scaly surface with a stuck-on appearance.",
+        "Mild itch or irritation from rubbing.",
+    ],
+    "bcc": [
+        "Pearly bump or shiny pink lesion.",
+        "Sore that does not heal completely.",
+        "Easy bleeding after minor trauma.",
+        "Slowly enlarging lesion on sun-exposed skin.",
+    ],
+    "akiec": [
+        "Rough, sandpaper-like scaly patch.",
+        "Persistent red or brown irritated spot.",
+        "Localized tenderness or mild burning.",
+        "Lesion more visible after sun exposure.",
+    ],
+    "vasc": [
+        "Red, purple, or blue vascular spot.",
+        "Lesion that may bleed with minor contact.",
+        "Soft raised bump in some cases.",
+        "Color intensity changes over time.",
+    ],
+    "df": [
+        "Firm, small nodule under the skin.",
+        "Brown to reddish surface discoloration.",
+        "Dimple sign when pinched from the sides.",
+        "Mild tenderness on pressure.",
+    ],
+    "default": [
+        "Visible localized skin lesion or patch.",
+        "Redness, scaling, or texture change.",
+        "Intermittent itch or irritation.",
+        "Symptoms that persist beyond a few days.",
+    ],
+}
+
+
 def canonicalize_class_name(name: str | None) -> str:
     normalized_name = (name or "").strip().lower()
     if not normalized_name:
@@ -638,9 +714,14 @@ def infer_disease_from_filename(image_name: str) -> str | None:
 def build_supportive_content(predicted_class: str, confidence: int) -> dict[str, Any]:
     canonical_class = canonicalize_class_name(predicted_class)
     profile = get_supportive_profile(canonical_class)
+    common_symptoms = COMMON_SYMPTOMS_BY_PROFILE.get(
+        canonical_class,
+        COMMON_SYMPTOMS_BY_PROFILE["default"],
+    )
 
     return {
         "summary": profile["summary"].format(disease=canonical_class, confidence=confidence),
+        "common_symptoms": common_symptoms,
         "precautions_do": profile["precautions_do"],
         "precautions_dont": profile["precautions_dont"],
         "diet_include": profile["diet_include"],
@@ -690,6 +771,7 @@ def build_analysis_result(
         "overview": overview,
         "observation": observation,
         "summary": supportive_content["summary"],
+        "common_symptoms": supportive_content["common_symptoms"],
         "recommendation": supportive_content["recommendation"],
         "precautions_do": supportive_content["precautions_do"],
         "precautions_dont": supportive_content["precautions_dont"],
@@ -718,6 +800,7 @@ def build_fallback_analysis_result(
         "overview": supportive_content["summary"],
         "observation": fallback_details["observation"],
         "summary": supportive_content["summary"],
+        "common_symptoms": supportive_content["common_symptoms"],
         "recommendation": supportive_content["recommendation"],
         "precautions_do": supportive_content["precautions_do"],
         "precautions_dont": supportive_content["precautions_dont"],

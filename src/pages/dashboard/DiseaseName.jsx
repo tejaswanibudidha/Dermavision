@@ -3,6 +3,9 @@ import useAnalysisResult from '../../hooks/useAnalysisResult';
 
 const DiseaseName = () => {
     const { analysis } = useAnalysisResult();
+    const symptoms = analysis.common_symptoms?.length
+        ? analysis.common_symptoms
+        : analysis.precautions_do;
 
     return (
         <div className="max-w-3xl">
@@ -26,7 +29,7 @@ const DiseaseName = () => {
 
                     <h3 className="text-lg font-semibold text-primary-900 mt-6 mb-2">Common Symptoms</h3>
                     <ul className="list-disc pl-5 space-y-2 text-secondary-700">
-                        {analysis.precautions_do.map((item, idx) => (
+                        {symptoms.map((item, idx) => (
                             <li key={idx}>{item}</li>
                         ))}
                     </ul>

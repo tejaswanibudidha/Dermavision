@@ -8,6 +8,12 @@ export const defaultAnalysis = {
     severity: 'Moderate',
     observation: 'The image shows inflamed and dry patches that are consistent with eczema.',
     summary: 'AI visual features strongly match atopic dermatitis patterns.',
+    common_symptoms: [
+        'Dry and itchy skin patches.',
+        'Redness and mild swelling in affected areas.',
+        'Rough or flaky skin texture.',
+        'Irritation that may worsen at night.',
+    ],
     recommendation: 'Use gentle moisturizers and consult a dermatologist if symptoms persist beyond 7 days.',
     precautions_do: [
         'Moisturize affected skin at least twice daily.',
